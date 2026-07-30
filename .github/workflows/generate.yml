@@ -34,7 +34,7 @@ jobs:
         
     - name: Install TWRP generator
       run: |
-        pip3 install --upgrade twrpdtgen
+        pip3 install twrpdtgen==2.3.0
         
     - name: Download recovery image
       run: |
