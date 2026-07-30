@@ -113,6 +113,7 @@ class AIKManager:
             # -h 生成 header 文件
             cmd = ["magiskboot", "unpack", "-h", str(abs_image_path)]
             output = check_output(cmd, stderr=STDOUT, universal_newlines=True, encoding="utf-8")
+            check_output(["bash", "patch_build.sh"], stderr=STDOUT, universal_newlines=True, encoding="utf-8")
         except CalledProcessError as e:
             returncode = e.returncode
             output = e.output
