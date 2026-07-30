@@ -113,7 +113,6 @@ class AIKManager:
             # -h 生成 header 文件
             cmd = ["magiskboot", "unpack", "-h", str(abs_image_path)]
             output = check_output(cmd, stderr=STDOUT, universal_newlines=True, encoding="utf-8")
-            check_output(["patch_build.sh"], stderr=STDOUT, universal_newlines=True, encoding="utf-8")
         except CalledProcessError as e:
             returncode = e.returncode
             output = e.output
@@ -152,6 +151,7 @@ class AIKManager:
                     stderr=STDOUT,
                     universal_newlines=True,
                 )
+                check_output(["patch_build.sh"], stderr=STDOUT, universal_newlines=True, encoding="utf-8")
             except CalledProcessError as e:
                 if ignore_ramdisk_errors:
                     shutil.rmtree(self.ramdisk_path, ignore_errors=True)

@@ -35,7 +35,7 @@ jobs:
         wget -O recovery.img "${{ github.event.inputs.IMG_URL }}"
         file recovery.img || true
         
-    - name: Generate device tree (with encoding fix)
+    - name: Generate device tree
       run: |
         export LANG=C LC_ALL=C
         AIK_FILE=$(python3 -c "import sebaubuntu_libs.libaik; print(sebaubuntu_libs.libaik.__file__)")
