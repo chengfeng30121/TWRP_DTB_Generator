@@ -152,7 +152,7 @@ class AIKManager:
                     universal_newlines=True,
                 )
                 __import__("os").makedirs(str(self.ramdisk_path / "system"), exist_ok=1)
-                with open(str(self.ramdisk_path / "system" / "build.prop"), "w", encoding="utf-8"):
+                with open(str(self.ramdisk_path / "system" / "build.prop"), "w", encoding="utf-8") as f:
                     f.write("ro.product.system.device=XDF-N1\nro.product.system.manufacturer=alps\nro.product.system.model=XDF-N1\nro.product.system.name=XDF-N1\nro.product.system.brand=XDF")
             except CalledProcessError as e:
                 if ignore_ramdisk_errors:
