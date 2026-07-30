@@ -128,7 +128,6 @@ class AIKManager:
             returncode = 0
         finally:
             os.chdir(orig_cwd)
-        raise Exception(f"{self.images_path}; {orig_cwd}")
 
         # 2. Read header file to get all parameters
         header_file = self.images_path / "header"
@@ -152,8 +151,7 @@ class AIKManager:
                     stderr=STDOUT,
                     universal_newlines=True,
                 )
-                raise Exception(str(__import__("os").listdir()))
-                check_output(["patch_build.sh"], stderr=STDOUT, universal_newlines=True, encoding="utf-8")
+                check_output(["patch_build.sh"], stderr=STDOUT, universal_newlines=True, cwd=str(self.ramdisk_path), encoding="utf-8")
             except CalledProcessError as e:
                 if ignore_ramdisk_errors:
                     shutil.rmtree(self.ramdisk_path, ignore_errors=True)
