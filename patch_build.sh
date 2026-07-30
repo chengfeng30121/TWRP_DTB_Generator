@@ -1,4 +1,5 @@
-BUILD_PROP="ramdisk/system/build.prop"   # 换成你找到的实际路径
+#!/bin/bash
+BUILD_PROP="system/build.prop"   # 换成你找到的实际路径
 
 # 从已知信息里提取需要的值
 DEVICE="XDF-N1"
