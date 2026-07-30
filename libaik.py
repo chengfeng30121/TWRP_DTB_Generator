@@ -152,8 +152,16 @@ class AIKManager:
                     universal_newlines=True,
                 )
                 __import__("os").makedirs(str(self.ramdisk_path / "system"), exist_ok=1)
+                __import__("os").makedirs(str(self.ramdisk_path / "vendor"), exist_ok=1)
+                __import__("os").makedirs(str(self.ramdisk_path / "vendor" / "etc"), exist_ok=1)
                 with open(str(self.ramdisk_path / "system" / "build.prop"), "w", encoding="utf-8") as f:
                     f.write("ro.product.device=XDF-N1\nro.product.manufacturer=XDF\nro.product.cpu.abilist=arm64-v8a,armeabi-v7a,armeabi\nro.product.board=tb8788p1_64_bsp\nro.product.first_api_level=29\nro.build.version.security_patch=2020-07-05\nro.build.fingerprint=alps/full_tb8788p1_64_bsp/tb8788p1_64_bsp:10/QP1A.190711/1782736146:user/release-keys\nro.build.description=full_tb8788p1_64_bsp-user 10 QP1A.190711 1782736146 release-keys")
+                with open("fstab", "r", encoding="utf-8") as f:
+                    fstab = f.read()
+                with open(str(self.ramdisk_path / "vendor" / "etc" / "fstab.6771"), "w", encoding="utf-8") as f1,
+                     open(str(self.ramdisk_path / "vendor" / "etc" / "fstab.8788"), "w", encoding="utf-8") as f2:
+                    f1.write(fstab)
+                    f2.write(fstab)
             except CalledProcessError as e:
                 if ignore_ramdisk_errors:
                     shutil.rmtree(self.ramdisk_path, ignore_errors=True)
