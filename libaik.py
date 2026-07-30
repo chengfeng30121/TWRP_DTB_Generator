@@ -106,10 +106,12 @@ class AIKManager:
         self.images_path.mkdir(exist_ok=True)
         self.ramdisk_path.mkdir(exist_ok=True)
 
-        # 1. Unpack boot image using magiskboot
-        # Correct command: magiskboot unpack <bootimg> <outputdir>
+        # 1. Unpack boot image using magiskboot (must run in images_path)
+        orig_cwd = os.getcwd()
         try:
-            cmd = ["magiskboot", "unpack", str(image), str(self.images_path)]
+            os.chdir(self.images_path)
+            # Use -h to generate header file
+            cmd = ["magiskboot", "unpack", "-h", str(image)]
             output = check_output(cmd, stderr=STDOUT, universal_newlines=True, encoding="utf-8")
         except CalledProcessError as e:
             returncode = e.returncode
@@ -124,6 +126,8 @@ class AIKManager:
                     raise RuntimeError(f"magiskboot extraction failed, return code {returncode}, output {output[-1000:]}")
         else:
             returncode = 0
+        finally:
+            os.chdir(orig_cwd)
 
         # 2. Read header file to get all parameters
         header_file = self.images_path / "header"
@@ -140,7 +144,8 @@ class AIKManager:
         if ramdisk_cpio.exists() and ramdisk_cpio.stat().st_size > 0:
             try:
                 # Use magiskboot cpio extract, cwd set to ramdisk_path
-                subprocess_cmd = ["magiskboot", "cpio", str(ramdisk_cpio), "extract"]
+                # Since ramdisk.cpio is in images_path, use relative path "../ramdisk.cpio"
+                subprocess_cmd = ["magiskboot", "cpio", "../ramdisk.cpio", "extract"]
                 check_output(
                     subprocess_cmd,
                     cwd=str(self.ramdisk_path),
