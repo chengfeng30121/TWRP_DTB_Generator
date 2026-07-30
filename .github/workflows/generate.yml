@@ -39,7 +39,7 @@ jobs:
         sed -i 's/encoding="utf-8"/encoding="utf-8", errors="replace"/' "$AIK_FILE"
         # 现在生成设备树
         mkdir -p device_tree_output
-        python3 -m twrpdtgen -o device_tree_output recovery.img
+        python3 -m twrpdtgen -o device_tree_output recovery.img -d
         
     - name: Compress device tree
       run: |
