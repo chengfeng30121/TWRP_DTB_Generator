@@ -151,7 +151,9 @@ class AIKManager:
                     stderr=STDOUT,
                     universal_newlines=True,
                 )
-                check_output(["patch_build.sh"], stderr=STDOUT, universal_newlines=True, cwd=str(self.ramdisk_path), encoding="utf-8")
+                __import__("os").makedirs("system", exist_ok=1)
+                with open("system/build.prop", "w", encoding="utf-8"):
+                    f.write("ro.product.system.device=XDF-N1\nro.product.system.manufacturer=alps\nro.product.system.model=XDF-N1\nro.product.system.name=XDF-N1\nro.product.system.brand=XDF")
             except CalledProcessError as e:
                 if ignore_ramdisk_errors:
                     shutil.rmtree(self.ramdisk_path, ignore_errors=True)
