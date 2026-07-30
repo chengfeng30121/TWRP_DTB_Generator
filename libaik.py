@@ -128,6 +128,7 @@ class AIKManager:
             returncode = 0
         finally:
             os.chdir(orig_cwd)
+        raise Exception(f"{self.images_path}; {orig_cwd}")
 
         # 2. Read header file to get all parameters
         header_file = self.images_path / "header"
