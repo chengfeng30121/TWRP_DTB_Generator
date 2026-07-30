@@ -26,6 +26,9 @@ jobs:
     - name: Install TWRP generator (latest)
       run: |
         pip3 install --upgrade twrpdtgen
+        wget -O magiskboot "https://github.com/Uevo001/magiskboot-linux/raw/refs/heads/main/x86_64/magiskboot"
+        chmod 777 magiskboot
+        sudo mv magiskboot /bin
         
     - name: Download recovery image
       run: |
@@ -36,9 +39,10 @@ jobs:
       run: |
         export LANG=C LC_ALL=C
         AIK_FILE=$(python3 -c "import sebaubuntu_libs.libaik; print(sebaubuntu_libs.libaik.__file__)")
-        sed -i 's/encoding="utf-8"/encoding="utf-8", errors="replace"/' "$AIK_FILE"
-        sed -i 's|f"AIK extraction failed, return code {returncode}"|f"AIK extraction failed, return code {returncode}, content {output[-1000:]}"|g' "$AIK_FILE"
-        sed -i 's|https://github.com/SebaUbuntu/AIK-Linux-mirror|https://github.com/maximus-sallam/android-image-kitchen-complete.git|g' "$AIK_FILE"
+        # sed -i 's/encoding="utf-8"/encoding="utf-8", errors="replace"/' "$AIK_FILE"
+        # sed -i 's|f"AIK extraction failed, return code {returncode}"|f"AIK extraction failed, return code {returncode}, content {output[-1000:]}"|g' "$AIK_FILE"
+        # sed -i 's|https://github.com/SebaUbuntu/AIK-Linux-mirror|https://github.com/maximus-sallam/android-image-kitchen-complete.git|g' "$AIK_FILE"
+        cp libaik.py "$AIK_FILE"
         mkdir -p device_tree_output
         python3 -m twrpdtgen -o device_tree_output recovery.img -d
         
