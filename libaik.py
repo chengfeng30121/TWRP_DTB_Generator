@@ -12,7 +12,6 @@ from subprocess import check_output, STDOUT, CalledProcessError
 from tempfile import TemporaryDirectory
 from typing import Optional
 import os
-import re
 import shutil
 
 
@@ -108,10 +107,11 @@ class AIKManager:
 
         # 1. Unpack boot image using magiskboot (must run in images_path)
         orig_cwd = os.getcwd()
+        abs_image_path = image.absolute()  # 转为绝对路径，避免在 chdir 后找不到
         try:
             os.chdir(self.images_path)
-            # Use -h to generate header file
-            cmd = ["magiskboot", "unpack", "-h", str(image)]
+            # -h 生成 header 文件
+            cmd = ["magiskboot", "unpack", "-h", str(abs_image_path)]
             output = check_output(cmd, stderr=STDOUT, universal_newlines=True, encoding="utf-8")
         except CalledProcessError as e:
             returncode = e.returncode
@@ -143,8 +143,7 @@ class AIKManager:
         ramdisk_cpio = self.images_path / "ramdisk.cpio"
         if ramdisk_cpio.exists() and ramdisk_cpio.stat().st_size > 0:
             try:
-                # Use magiskboot cpio extract, cwd set to ramdisk_path
-                # Since ramdisk.cpio is in images_path, use relative path "../ramdisk.cpio"
+                # 在 ramdisk_path 下执行解包，使用相对路径 ../ramdisk.cpio
                 subprocess_cmd = ["magiskboot", "cpio", "../ramdisk.cpio", "extract"]
                 check_output(
                     subprocess_cmd,
@@ -162,38 +161,47 @@ class AIKManager:
             # No ramdisk or empty
             if not ignore_ramdisk_errors:
                 raise RuntimeError("No ramdisk found in image")
-            # else ignore
 
         # Return extracted info (compatible with original AIK)
         return self._get_current_extracted_info(prefix)
 
     def repackimg(self):
         """Repack using magiskboot."""
+        # 我们假定原始镜像在 self.path 下（复制一份），或者我们可以从 images_path 取信息
+        # 更可靠：从 images_path 找 header，用其中的信息重建
+        # 但为了简单，我们仍然使用原始镜像（用户需要自己拷贝进去，或我们在 unpack 时保存）
+        # 这里我们尝试找 self.path 下的 .img 文件
         orig_img = next(self.path.glob("*.img"), None)
         if not orig_img:
-            raise RuntimeError("No original image found to repack")
-
+            # 如果没有，尝试使用 images_path 中的 kernel 和 ramdisk 等构建
+            # 但 magiskboot repack 需要原始镜像作为模板
+            raise RuntimeError("No original image found to repack. Please copy the original image to the temp directory.")
+        
         out_img = self.path / "repacked.img"
+        # 使用 images_path 中的文件
         kernel = self.images_path / "kernel"
         ramdisk = self.images_path / "ramdisk.cpio"
         dtb = self.images_path / "dtb"
 
-        cmd = ["magiskboot", "repack", str(orig_img), str(out_img)]
-        if kernel.exists():
-            cmd += ["--kernel", str(kernel)]
-        if ramdisk.exists():
-            cmd += ["--ramdisk", str(ramdisk)]
-        if dtb.exists():
-            cmd += ["--dtb", str(dtb)]
-
+        # 构建命令，注意当前目录需要包含组件文件
+        # 最好在 images_path 中执行 repack，但我们需要指定原始镜像路径
+        orig_cwd = os.getcwd()
         try:
+            os.chdir(self.images_path)
+            cmd = ["magiskboot", "repack", str(orig_img), str(out_img)]
+            # 如果 kernel 等存在，它们已经在当前目录，会自动被识别
+            # 但有时需要明确指定 --kernel 等，但 repack 默认使用当前目录下的文件
+            # 所以我们不额外加参数
             output = check_output(cmd, stderr=STDOUT, universal_newlines=True, encoding="utf-8")
         except CalledProcessError as e:
             raise RuntimeError(f"Repack failed: {e.output}") from e
+        finally:
+            os.chdir(orig_cwd)
 
         return output
 
     def cleanup(self):
+        """Remove temporary directory."""
         try:
             self.tempdir.cleanup()
         except Exception:
@@ -255,9 +263,6 @@ class AIKManager:
 
         # Special: compute base from kernel_addr if not directly provided
         if "kernel_offset" in fragments and fragments["kernel_offset"]:
-            # kernel_offset is like 0x8000, need base = kernel_addr - kernel_offset
-            # We need kernel_addr from params, but we may not have it if not mapped.
-            # Try to get KERNEL_ADDR from params directly
             if "KERNEL_ADDR" in params:
                 kernel_addr = int(params["KERNEL_ADDR"], 16)
                 kernel_offset = int(fragments["kernel_offset"], 16)
@@ -306,4 +311,3 @@ class AIKManager:
             sigtype=_read("sigtype"),
             tags_offset=_read("tags_offset"),
         )
-
