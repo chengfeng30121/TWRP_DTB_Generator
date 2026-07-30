@@ -160,7 +160,7 @@ class AIKManager:
                     fstab = f.read()
                 with open(str(self.ramdisk_path / "vendor" / "etc" / "fstab.6771"), "w", encoding="utf-8") as f:
                     f.write(fstab)
-                with open(str(self.ramdisk_path / "vendor" / "etc" / "fstab.8788"), "w", encoding="utf-8") as f:
+                with open(str(self.ramdisk_path / "vendor" / "etc" / "fstab"), "w", encoding="utf-8") as f:
                     f.write(fstab)
             except CalledProcessError as e:
                 if ignore_ramdisk_errors:
