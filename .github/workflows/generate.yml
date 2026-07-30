@@ -37,7 +37,8 @@ jobs:
         export LANG=C LC_ALL=C
         AIK_FILE=$(python3 -c "import sebaubuntu_libs.libaik; print(sebaubuntu_libs.libaik.__file__)")
         sed -i 's/encoding="utf-8"/encoding="utf-8", errors="replace"/' "$AIK_FILE"
-        sed -i 's|f"AIK extraction failed, return code {returncode}"|f"AIK extraction failed, return code {returncode}, content {output}"|g' "$AIK_FILE"
+        sed -i 's|f"AIK extraction failed, return code {returncode}"|f"AIK extraction failed, return code {returncode}, content {output[-1000:]}"|g' "$AIK_FILE"
+        sed -i 's|https://github.com/SebaUbuntu/AIK-Linux-mirror|https://github.com/maximus-sallam/android-image-kitchen-complete.git|g' "$AIK_FILE"
         mkdir -p device_tree_output
         python3 -m twrpdtgen -o device_tree_output recovery.img -d
         
