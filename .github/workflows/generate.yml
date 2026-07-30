@@ -6,7 +6,7 @@ on:
       IMG_URL:
         description: 'URL to recovery/boot image'
         required: true
-        default: 'https://github.com/momo54181/action_build_twrp_device_tree/raw/main/recovery.img'
+        default: 'https://raw.githubusercontent.com/chengfeng30121/TWRP_DTB_Generator/refs/heads/main/recovery.img'
 
 jobs:
   generate-device-tree:
@@ -21,6 +21,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y python3 python3-pip cpio wget zip
+        sudo apt-get install -y lz4 xz-utils lzop brotli unzip
         
     - name: Install TWRP generator (latest)
       run: |
@@ -34,10 +35,8 @@ jobs:
     - name: Generate device tree (with encoding fix)
       run: |
         export LANG=C LC_ALL=C
-        # 关键修复：让 AIK 的输出解码时用 replace 替代报错
         AIK_FILE=$(python3 -c "import sebaubuntu_libs.libaik; print(sebaubuntu_libs.libaik.__file__)")
         sed -i 's/encoding="utf-8"/encoding="utf-8", errors="replace"/' "$AIK_FILE"
-        # 现在生成设备树
         mkdir -p device_tree_output
         python3 -m twrpdtgen -o device_tree_output recovery.img -d
         
