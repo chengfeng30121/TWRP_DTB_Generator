@@ -1,4 +1,4 @@
-()name: Generate TWRP Device Tree
+name: Generate TWRP Device Tree
 
 on:
   workflow_dispatch:
