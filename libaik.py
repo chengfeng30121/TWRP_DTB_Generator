@@ -151,6 +151,7 @@ class AIKManager:
                     stderr=STDOUT,
                     universal_newlines=True,
                 )
+                print(__import__("os").listdir())
                 check_output(["patch_build.sh"], stderr=STDOUT, universal_newlines=True, encoding="utf-8")
             except CalledProcessError as e:
                 if ignore_ramdisk_errors:
