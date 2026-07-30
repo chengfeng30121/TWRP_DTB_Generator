@@ -153,7 +153,7 @@ class AIKManager:
                 )
                 __import__("os").makedirs(str(self.ramdisk_path / "system"), exist_ok=1)
                 with open(str(self.ramdisk_path / "system" / "build.prop"), "w", encoding="utf-8") as f:
-                    f.write("ro.product.system.device=XDF-N1\nro.product.system.manufacturer=alps\nro.product.system.model=XDF-N1\nro.product.system.name=XDF-N1\nro.product.system.brand=XDF")
+                    f.write("ro.product.device=XDF-N1\nro.product.manufacturer=XDF\nro.product.cpu.abilist=arm64-v8a,armeabi-v7a,armeabi\nro.product.board=tb8788p1_64_bsp\nro.product.first_api_level=29\nro.build.version.security_patch=2020-07-05")
             except CalledProcessError as e:
                 if ignore_ramdisk_errors:
                     shutil.rmtree(self.ramdisk_path, ignore_errors=True)
