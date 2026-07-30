@@ -14,7 +14,6 @@ from typing import Optional
 import os
 import re
 import shutil
-import struct
 
 
 ALLOWED_OS = ["Linux", "Darwin"]
@@ -89,11 +88,8 @@ class AIKManager:
         if system() not in ALLOWED_OS:
             raise NotImplementedError(f"{system()} is not supported")
 
-        # Ensure magiskboot is installed
         if which("magiskboot") is None:
             raise RuntimeError("magiskboot is not installed")
-
-        # Ensure cpio is installed (used for manual ramdisk extraction fallback)
         if which("cpio") is None:
             raise RuntimeError("cpio package is not installed")
 
@@ -101,8 +97,6 @@ class AIKManager:
         self.path = Path(self.tempdir.name)
         self.images_path = self.path / "split_img"
         self.ramdisk_path = self.path / "ramdisk"
-
-        # We no longer clone AIK; all work is done via magiskboot.
 
     def unpackimg(self, image: Path, ignore_ramdisk_errors: bool = False):
         """Extract recovery image using magiskboot."""
@@ -112,47 +106,49 @@ class AIKManager:
         self.images_path.mkdir(exist_ok=True)
         self.ramdisk_path.mkdir(exist_ok=True)
 
+        # 1. Unpack boot image using magiskboot
+        # Correct command: magiskboot unpack <bootimg> <outputdir>
         try:
-            # Run magiskboot unpack
-            cmd = ["magiskboot", "unpack", "-o", str(self.images_path), str(image)]
+            cmd = ["magiskboot", "unpack", str(image), str(self.images_path)]
             output = check_output(cmd, stderr=STDOUT, universal_newlines=True, encoding="utf-8")
         except CalledProcessError as e:
             returncode = e.returncode
             output = e.output
-            # For compatibility, treat errors similarly to original AIK
             if returncode != 0:
-                if "Unpacking failed" in output and ignore_ramdisk_errors:
-                    # Clean up ramdisk if it exists
+                if ignore_ramdisk_errors:
                     try:
                         shutil.rmtree(self.ramdisk_path)
                     except Exception:
                         pass
-                    # Still try to parse what we have
                 else:
                     raise RuntimeError(f"magiskboot extraction failed, return code {returncode}, output {output[-1000:]}")
         else:
             returncode = 0
 
-        # Parse magiskboot output to extract header info
-        params = self._parse_magiskboot_output(output)
+        # 2. Read header file to get all parameters
+        header_file = self.images_path / "header"
+        if not header_file.exists():
+            raise RuntimeError("magiskboot did not generate header file")
 
-        # Write fragment files so that _get_current_extracted_info works
+        params = self._parse_header_file(header_file)
+
+        # 3. Write fragment files (prefix-*) so that _get_current_extracted_info can read them
         self._write_fragment_files(prefix, params)
 
-        # Extract ramdisk.cpio to ramdisk folder
+        # 4. Extract ramdisk.cpio to ramdisk folder (if present)
         ramdisk_cpio = self.images_path / "ramdisk.cpio"
         if ramdisk_cpio.exists() and ramdisk_cpio.stat().st_size > 0:
             try:
-                # Use magiskboot cpio to extract
-                subprocess_check = check_output(
-                    ["magiskboot", "cpio", str(ramdisk_cpio), "extract"],
+                # Use magiskboot cpio extract, cwd set to ramdisk_path
+                subprocess_cmd = ["magiskboot", "cpio", str(ramdisk_cpio), "extract"]
+                check_output(
+                    subprocess_cmd,
                     cwd=str(self.ramdisk_path),
                     stderr=STDOUT,
                     universal_newlines=True,
                 )
             except CalledProcessError as e:
                 if ignore_ramdisk_errors:
-                    # Remove ramdisk folder to avoid partial files
                     shutil.rmtree(self.ramdisk_path, ignore_errors=True)
                     self.ramdisk_path.mkdir(exist_ok=True)
                 else:
@@ -161,14 +157,13 @@ class AIKManager:
             # No ramdisk or empty
             if not ignore_ramdisk_errors:
                 raise RuntimeError("No ramdisk found in image")
+            # else ignore
 
-        # Return extracted info
+        # Return extracted info (compatible with original AIK)
         return self._get_current_extracted_info(prefix)
 
     def repackimg(self):
         """Repack using magiskboot."""
-        # Find original boot image (we assume it's the only one in tempdir root, or we can use a saved copy)
-        # We'll use the first .img file in self.path (original image should be there)
         orig_img = next(self.path.glob("*.img"), None)
         if not orig_img:
             raise RuntimeError("No original image found to repack")
@@ -186,10 +181,6 @@ class AIKManager:
         if dtb.exists():
             cmd += ["--dtb", str(dtb)]
 
-        # Additional options from header files (if we had them) can be added,
-        # but magiskboot repack often infers from the original image.
-        # We'll rely on the original image's header.
-
         try:
             output = check_output(cmd, stderr=STDOUT, universal_newlines=True, encoding="utf-8")
         except CalledProcessError as e:
@@ -198,7 +189,6 @@ class AIKManager:
         return output
 
     def cleanup(self):
-        """Remove temporary directory."""
         try:
             self.tempdir.cleanup()
         except Exception:
@@ -206,75 +196,36 @@ class AIKManager:
 
     # ---------------------- Internal helpers ----------------------
 
-    def _parse_magiskboot_output(self, output: str) -> dict:
-        """Parse key: value pairs from magiskboot's stdout."""
+    def _parse_header_file(self, header_path: Path) -> dict:
+        """Parse magiskboot header file (key=value lines)."""
         params = {}
-        pattern = re.compile(r'^\s*-\s*([A-Z_]+)\s*:\s*(.*)$', re.MULTILINE)
-        for match in pattern.finditer(output):
-            key = match.group(1)
-            value = match.group(2).strip()
-            params[key] = value
+        with open(header_path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                params[key.strip()] = value.strip()
+        return params
 
-        # Also try to get more fields if not present (sometimes magiskboot doesn't output all)
-        # We can fallback to reading the image header manually for some fields.
-        # But we'll rely on what we got.
-
-        # Ensure we have base address, offsets, etc.
-        # Compute base as KERNEL_ADDR - 0x8000 (common)
-        if "KERNEL_ADDR" in params:
-            kernel_addr = int(params["KERNEL_ADDR"], 16)
-            base = kernel_addr - 0x8000
-            params["BASE"] = hex(base)
-            params["KERNEL_OFFSET"] = hex(0x8000)
-            if "RAMDISK_ADDR" in params:
-                ramdisk_addr = int(params["RAMDISK_ADDR"], 16)
-                params["RAMDISK_OFFSET"] = hex(ramdisk_addr - base)
-            if "TAGS_ADDR" in params:
-                tags_addr = int(params["TAGS_ADDR"], 16)
-                params["TAGS_OFFSET"] = hex(tags_addr - base)
-        else:
-            # Fallback: try to read from image header directly
-            # (we'll do this in _write_fragment_files if needed)
-            pass
-
-        # Map keys to AIK expected names
+    def _write_fragment_files(self, prefix: str, params: dict):
+        """Write split_img/prefix-* files from parsed header."""
+        # Map magiskboot header keys to AIK fragment names
         mapping = {
             "BASE": "base",
-            "BOARD_NAME": "board_name",  # might be "NAME"?
+            "BOARD_NAME": "board_name",
             "CMDLINE": "cmdline",
             "PAGE_SIZE": "pagesize",
             "HEADER_VERSION": "header_version",
             "OS_VERSION": "os_version",
             "RAMDISK_FMT": "ramdiskcomp",
             "SIGNATURE": "sigtype",
+            "KERNEL_ADDR": "kernel_offset",
+            "RAMDISK_ADDR": "ramdisk_offset",
+            "TAGS_ADDR": "tags_offset",
+            "DTB_OFFSET": "dtb_offset",
         }
-        # Note: some fields may be missing; we'll handle defaults later.
 
-        # Create a dict with AIK-style keys
-        aik_params = {}
-        for magisk_key, aik_key in mapping.items():
-            if magisk_key in params:
-                aik_params[aik_key] = params[magisk_key]
-
-        # Additional fields: dtb_offset (usually 0 for v0)
-        if "header_version" in aik_params:
-            # dtb_offset is usually present in header_version >= 1? We'll set to 0 if not found.
-            aik_params["dtb_offset"] = "0"
-
-        # image_type: default to "boot"
-        aik_params["image_type"] = "boot"
-
-        # origsize: we can get from file size
-        # We'll set later in _write_fragment_files
-
-        return aik_params
-
-    def _write_fragment_files(self, prefix: str, params: dict):
-        """Write split_img/prefix-* files so _get_current_extracted_info can read them."""
-        # Ensure images_path exists
-        self.images_path.mkdir(exist_ok=True)
-
-        # List of expected fragments with default values
         fragments = {
             "base": "0x10000000",
             "board_name": "",
@@ -292,31 +243,29 @@ class AIKManager:
             "tags_offset": "0x00000100",
         }
 
-        # Update with parsed values
-        for key, default in fragments.items():
-            if key in params and params[key]:
-                fragments[key] = params[key]
+        # Override with parsed values
+        for magisk_key, aik_key in mapping.items():
+            if magisk_key in params:
+                fragments[aik_key] = params[magisk_key]
 
-        # Special handling for base, offsets if not set properly
-        # If we have kernel_addr from magiskboot output, we can compute better
-        # But we already did in _parse_magiskboot_output for BASE, KERNEL_OFFSET, etc.
+        # Special: compute base from kernel_addr if not directly provided
+        if "kernel_offset" in fragments and fragments["kernel_offset"]:
+            # kernel_offset is like 0x8000, need base = kernel_addr - kernel_offset
+            # We need kernel_addr from params, but we may not have it if not mapped.
+            # Try to get KERNEL_ADDR from params directly
+            if "KERNEL_ADDR" in params:
+                kernel_addr = int(params["KERNEL_ADDR"], 16)
+                kernel_offset = int(fragments["kernel_offset"], 16)
+                base = kernel_addr - kernel_offset
+                fragments["base"] = hex(base)
 
-        # Write each fragment as a file
+        # Write each fragment
         for key, value in fragments.items():
             fragment_file = self.images_path / f"{prefix}-{key}"
             fragment_file.write_text(value + "\n")
 
-        # Copy the kernel, ramdisk, dtb from images_path to the same location (they are already there)
-        # but we also need to ensure they exist and have correct names.
-
-        # For origsize, we can set to file size of kernel+ramdisk maybe? But AIK uses origsize from header.
-        # We can ignore for now, it's not critical.
-
     def _get_current_extracted_info(self, prefix: str):
         """Same as original - reads fragment files and returns AIKImageInfo."""
-        # This code is identical to the original, but we keep it as-is.
-        # It reads files from self.images_path and self.ramdisk_path.
-        # We just need to ensure the files exist.
         def _read(fragment, default=None):
             file = self.images_path / f"{prefix}-{fragment}"
             if not file.exists():
